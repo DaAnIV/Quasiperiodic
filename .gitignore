@@ -1,0 +1,6 @@
+/.idea/
+/.ipynb_checkpoints/
+/venv/
+/output/*.png
+/output/*.eps
+/output/*.svg
