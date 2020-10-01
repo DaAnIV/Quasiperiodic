@@ -1,22 +1,47 @@
-#!/usr/bin/env python
-# coding: utf-8
+#!/usr/bin/env python3
 
-# In[1]:
+"""A script to create the Kohomoto butterfly plot.
 
+usage: Butterfly.py [-h] [-l LINEWIDTH] [--driver DRIVER] [-d DPI] [-s SAVE_EVERY] [-v V]
+                    [--merge] [--merge-prefix MERGE_PREFIX] [--merge-per MERGE_PER] n
 
-import fractions
+Plot the Kohomoto butterfly and save as a PNG
+
+positional arguments:
+  n                     Use the nth farey sequence as the alphas
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -l LINEWIDTH, --linewidth LINEWIDTH
+                        line width for each spectrum line
+  --driver DRIVER       eigenvalue driver (Read more in scipy.linalg.eigvalsh docs)
+  -d DPI, --dpi DPI     output image dpi
+  -s SAVE_EVERY, --save-every SAVE_EVERY
+                        save every x alphas, -1 for a single output
+  -v V                  Butterfly potential amplitude
+  --merge               Prints the command to merge the split plot using ImageMagick CLI
+  --merge-prefix MERGE_PREFIX
+                        Add a prefix to the png images
+  --merge-per MERGE_PER
+                        ImageMagick takes lots of RAM so we do multiple merges
+"""
+
+__author__ = "Barak Biber"
+__license__ = "MIT"
+__copyright__ = "Copyright (c) 2020 Barak Biber"
+
 
 import os
-import matplotlib.pyplot as plt
-import numpy as np
-import scipy.linalg
-import scipy.optimize
-import scipy.sparse
-import scipy.special
-import sortednp
 import tqdm
-from timeit import default_timer as timer
 import argparse
+import sortednp
+import fractions
+import numpy as np
+import scipy.sparse
+import scipy.linalg
+import scipy.special
+import scipy.optimize
+from timeit import default_timer as timer
 
 
 def get_matrix_for_alpha(p, q, v=1):
@@ -161,16 +186,18 @@ def merge(count, prefix='', per=30):
 
 
 def main():
-    parser = argparse.ArgumentParser("Plot butterfly")
-    parser.add_argument('n', type=int, help='Use the nth farey sequence')
+    parser = argparse.ArgumentParser("Butterfly", description="Plot the Kohomoto butterfly and save as a PNG")
+    parser.add_argument('n', type=int, help='Use the nth farey sequence as the alphas')
     parser.add_argument('-l', '--linewidth', type=float, help='line width for each spectrum line', default=0.1)
-    parser.add_argument('--driver', help='eigenvalue driver', default='evr')
+    parser.add_argument('--driver', help='eigenvalue driver (Read more in scipy.linalg.eigvalsh docs)', default='evr')
     parser.add_argument('-d', '--dpi', type=int, help='output image dpi', default=400)
-    parser.add_argument('-s', '--save-every', type=int, help='save every x alphas, -1 for 1 output', default=1000)
+    parser.add_argument('-s', '--save-every', type=int, help='save every x alphas, -1 for a single output', default=-1)
     parser.add_argument('-v', type=int, help='Butterfly potential amplitude', default=1)
-    parser.add_argument('--merge', action='store_true')
-    parser.add_argument('--merge-prefix', default='')
-    parser.add_argument('--merge-per', type=int, default=30)
+    parser.add_argument('--merge', action='store_true', help='Prints the command to merge the split plot using '
+                                                             'ImageMagick CLI')
+    parser.add_argument('--merge-prefix', default='', help="Add a prefix to the png images")
+    parser.add_argument('--merge-per', type=int, default=30, help="ImageMagick takes lots of RAM so we do multiple "
+                                                                  "merges")
     args = parser.parse_args()
     sequence = list(farey_sequence(args.n))
 
