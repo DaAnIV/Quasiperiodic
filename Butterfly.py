@@ -41,6 +41,7 @@ import scipy.sparse
 import scipy.linalg
 import scipy.special
 import scipy.optimize
+import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 
 
@@ -185,6 +186,19 @@ def merge(count, prefix='', per=30):
         print(cmd)
 
 
+def format_time(dt):
+    precision = 3
+    units = {"nsec": 1e-9, "usec": 1e-6, "msec": 1e-3, "sec": 1.0}
+
+    scales = [(scale, unit) for unit, scale in units.items()]
+    scales.sort(reverse=True)
+    for scale, unit in scales:
+        if dt >= scale:
+            break
+
+    return "%.*g %s" % (precision, dt / scale, unit)
+
+
 def main():
     parser = argparse.ArgumentParser("Butterfly", description="Plot the Kohomoto butterfly and save as a PNG")
     parser.add_argument('n', type=int, help='Use the nth farey sequence as the alphas')
@@ -208,7 +222,7 @@ def main():
     start = timer()
     plot_butterfly(sequence, f"farey_{args.n}", linewidth=args.linewidth, dpi=args.dpi, driver=args.driver,
                    save_every=args.save_every, v=args.v)
-    print(f'Plotting took {timer()-start} sec')
+    print(f'Plotting took {format_time(timer()-start)}')
 
 
 if __name__ == '__main__':
