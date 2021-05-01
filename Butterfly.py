@@ -33,6 +33,7 @@ __copyright__ = "Copyright (c) 2020 Barak Biber"
 
 import os
 import tqdm
+import contfrac
 import argparse
 import sortednp
 import fractions
@@ -75,6 +76,9 @@ def get_intervals_from_matrix(_mat, driver='ev'):
 
     return _intervals
 
+def get_intervals_from_alpha(alpha, v=1, driver='ev'):
+    mat = get_matrix_for_alpha(alpha.numerator, alpha.denominator, v)
+    return get_intervals_from_matrix(mat, driver=driver)
 
 def get_spectrum_min_max(_mat):
     _q = _mat.shape[0]
@@ -111,7 +115,61 @@ def _set_butterfly_axis(ax, v):
     ax.set_xlabel('Spectrum')
 
 
-def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', save_every=500):
+def is_interval_contained(interval, intervals):
+    for a, b in intervals:
+        if interval[0] >= a and interval[1] <= b:
+            return True
+
+    return False
+
+
+def get_alpha_1_2(alpha):
+    coefficients = list(contfrac.continued_fraction(alpha))
+    alpha_1 = contfrac_to_fraction(coefficients[:-1])
+    coefficients[-1] -= 1
+    alpha_2 = contfrac_to_fraction(coefficients)
+
+    return alpha_1, alpha_2
+
+
+def plot_alpha(alpha, ax, linewidth=0.1, v=1, driver='ev', coloring_scheme=None):
+    should_color = (coloring_scheme is not None)
+    color_by_up_down = (coloring_scheme == 'up_down')
+
+    color = 'k'
+    if should_color:
+        alpha_1, alpha_2 = get_alpha_1_2(alpha)
+        alpha_1_intervals = get_intervals_from_alpha(alpha_1, v=v, driver=driver)
+        alpha_2_intervals = get_intervals_from_alpha(alpha_2, v=v, driver=driver)
+    for x1, x2 in get_intervals_from_alpha(alpha, v=v, driver=driver):
+        interval = (x1, x2)
+        if color_by_up_down: 
+            if is_interval_contained(interval, alpha_1_intervals):
+                if alpha < alpha_1:
+                    color = 'b'
+                else:
+                    color = 'r'
+            elif is_interval_contained(interval, alpha_2_intervals):
+                if alpha < alpha_2:
+                    color = 'b'
+                else:
+                    color = 'r'
+            else:
+                color = 'k'
+        elif should_color:
+            if is_interval_contained(interval, alpha_1_intervals):
+                color = 'r'
+            elif is_interval_contained(interval, alpha_2_intervals):
+                color = 'b'
+            else:
+                color = 'k'
+
+        ax.plot(interval, [alpha, alpha], color + '-', linewidth=linewidth)
+
+
+def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', save_every=500, coloring_scheme=None):
+    if coloring_scheme is not None:
+        name = name + '_colored_' + coloring_scheme
     if not os.path.exists(f'output/{name}'):
         os.mkdir(f'output/{name}')
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -130,9 +188,7 @@ def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', s
     counter = 1
     for i, alpha in enumerate(tqdm.tqdm(alphas)):
         saved = False
-        mat = get_matrix_for_alpha(alpha.numerator, alpha.denominator, v)
-        for x1, x2 in get_intervals_from_matrix(mat, driver=driver):
-            ax.plot([x1, x2], [alpha, alpha], 'k-', linewidth=linewidth)
+        plot_alpha(alpha, ax=ax, linewidth=linewidth, v=v, driver=driver, coloring_scheme=coloring_scheme)
         if save_every != -1 and i > 0 and i % save_every == 0:
             fig.savefig(f'output/{name}/{counter}.png', dpi=dpi, transparent=True)
             ax.cla()
@@ -177,6 +233,21 @@ def farey_sequence(n: int, descending: bool = False, print_ends: bool = False):
             yield fractions.Fraction(a, b)
 
 
+def contfrac_to_fraction(coefficients):
+    numerator_2_ago = 0
+    numerator_1_ago = 1
+    denominator_2_ago = 1
+    denominator_1_ago = 0
+    for coefficient in coefficients:
+        numerator = coefficient * numerator_1_ago + numerator_2_ago
+        numerator_2_ago = numerator_1_ago
+        numerator_1_ago = numerator
+        denominator = coefficient * denominator_1_ago + denominator_2_ago
+        denominator_2_ago = denominator_1_ago
+        denominator_1_ago = denominator
+    return fractions.Fraction(numerator, denominator)
+    
+
 def merge(count, prefix='', per=30):
     cmd_format = "convert {{{}}}.png -set page '+%[fx:0]+%[fx:0]' -background none -layers merge +repage {}.png"
 
@@ -206,7 +277,8 @@ def main():
     parser.add_argument('--driver', help='eigenvalue driver (Read more in scipy.linalg.eigvalsh docs)', default='evr')
     parser.add_argument('-d', '--dpi', type=int, help='output image dpi', default=400)
     parser.add_argument('-s', '--save-every', type=int, help='save every x alphas, -1 for a single output', default=-1)
-    parser.add_argument('-v', type=int, help='Butterfly potential amplitude', default=1)
+    parser.add_argument('-v', type=float, help='Butterfly potential amplitude', default=1)
+    parser.add_argument('-c', '--color', choices=['up_down', 'a_b_type'], help='Color the butterfly according to type A/B intervals')
     parser.add_argument('--merge', action='store_true', help='Prints the command to merge the split plot using '
                                                              'ImageMagick CLI')
     parser.add_argument('--merge-prefix', default='', help="Add a prefix to the png images")
@@ -216,12 +288,15 @@ def main():
     sequence = list(farey_sequence(args.n))
 
     if args.merge:
-        merge(args.n, args.merge_prefix, per=args.merge_per)
+        num_files = len(sequence)//args.save_every
+        if len(sequence)%args.save_every > 0:
+            num_files += 1
+        merge(num_files, args.merge_prefix, per=args.merge_per)
         return
 
     start = timer()
     plot_butterfly(sequence, f"farey_{args.n}", linewidth=args.linewidth, dpi=args.dpi, driver=args.driver,
-                   save_every=args.save_every, v=args.v)
+                   save_every=args.save_every, v=args.v, coloring_scheme=args.color)
     print(f'Plotting took {format_time(timer()-start)}')
 
 
