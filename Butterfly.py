@@ -103,7 +103,7 @@ def get_spectrum_min_max(_mat):
     return _min, _max
 
 
-def _set_butterfly_axis(ax, v):
+def set_butterfly_axis(ax, v):
     ax.set_yticks(np.linspace(0, 1, 21))
     if v > 0:
         ax.set_xlim([-2.05, 2.05+v])
@@ -123,8 +123,9 @@ def is_interval_contained(interval, intervals):
     return False
 
 
-def get_alpha_1_2(alpha):
-    coefficients = list(contfrac.continued_fraction(alpha))
+def get_alpha_1_2(alpha, coefficients=None):
+    if coefficients is None:
+        coefficients = list(contfrac.continued_fraction(alpha))
     alpha_1 = contfrac_to_fraction(coefficients[:-1])
     coefficients[-1] -= 1
     alpha_2 = contfrac_to_fraction(coefficients)
@@ -132,16 +133,19 @@ def get_alpha_1_2(alpha):
     return alpha_1, alpha_2
 
 
-def plot_alpha(alpha, ax, linewidth=0.1, v=1, driver='ev', coloring_scheme=None):
+def plot_alpha(alpha, ax, linewidth=0.1, v=1, driver='ev', coloring_scheme=None, overide_y=None, coeff=None, verbose=False):
     should_color = (coloring_scheme is not None)
     color_by_up_down = (coloring_scheme == 'up_down')
 
     color = 'k'
     if should_color:
-        alpha_1, alpha_2 = get_alpha_1_2(alpha)
+        alpha_1, alpha_2 = get_alpha_1_2(alpha, coefficients=coeff)
         alpha_1_intervals = get_intervals_from_alpha(alpha_1, v=v, driver=driver)
         alpha_2_intervals = get_intervals_from_alpha(alpha_2, v=v, driver=driver)
-    for x1, x2 in get_intervals_from_alpha(alpha, v=v, driver=driver):
+    intervals = get_intervals_from_alpha(alpha, v=v, driver=driver)
+    if verbose:
+        print(f"{alpha} has {len(intervals)} bands")
+    for x1, x2 in intervals:
         interval = (x1, x2)
         if color_by_up_down: 
             if is_interval_contained(interval, alpha_1_intervals):
@@ -159,21 +163,41 @@ def plot_alpha(alpha, ax, linewidth=0.1, v=1, driver='ev', coloring_scheme=None)
         elif should_color:
             if is_interval_contained(interval, alpha_1_intervals):
                 color = 'r'
+                if verbose:
+                    print('A', end=' ')
             elif is_interval_contained(interval, alpha_2_intervals):
                 color = 'b'
+                if verbose:
+                    print('B', end=' ')
             else:
                 color = 'k'
+                if verbose:
+                    print('?', end=' ')
 
-        ax.plot(interval, [alpha, alpha], color + '-', linewidth=linewidth)
+        if overide_y is None:
+            y = alpha
+        else:
+            y = overide_y
 
 
-def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', save_every=500, coloring_scheme=None):
+        ax.plot(interval, [y, y], color + '-', linewidth=linewidth)
+
+    if verbose:
+        print()
+
+def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', save_every=500, coloring_scheme=None, ax=None):
     if coloring_scheme is not None:
         name = name + '_colored_' + coloring_scheme
     if not os.path.exists(f'output/{name}'):
         os.mkdir(f'output/{name}')
-    fig, ax = plt.subplots(figsize=(10, 10))
-    _set_butterfly_axis(ax, v)
+    saved = False
+    do_not_save = ax is not None
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
+        set_butterfly_axis(ax, v)
+    else:
+        save_every = -1        
 
     ax.plot([-2, 2], [0, 0], 'k-', linewidth=linewidth)
     ax.plot([-2 + v, 2 + v], [1, 1], 'k-', linewidth=linewidth)
@@ -182,9 +206,8 @@ def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', s
         fig.savefig(f'output/{name}/background.png', dpi=dpi)
 
         ax.cla()
-        _set_butterfly_axis(ax, v)
+        set_butterfly_axis(ax, v)
 
-    saved = False
     counter = 1
     for i, alpha in enumerate(tqdm.tqdm(alphas)):
         saved = False
@@ -192,14 +215,15 @@ def plot_butterfly(alphas, name, *, linewidth=0.1, dpi=400, v=1, driver='evr', s
         if save_every != -1 and i > 0 and i % save_every == 0:
             fig.savefig(f'output/{name}/{counter}.png', dpi=dpi, transparent=True)
             ax.cla()
-            _set_butterfly_axis(ax, v)
+            set_butterfly_axis(ax, v)
             counter += 1
             saved = True
 
-    if save_every == -1:
-        fig.savefig(f'output/{name}/{name}.png', dpi=dpi)
-    elif not saved:
-        fig.savefig(f'output/{name}/{counter}.png', dpi=dpi, transparent=True)
+    if not do_not_save:
+        if save_every == -1:
+            fig.savefig(f'output/{name}/{name}.png', dpi=dpi)
+        elif not saved:
+            fig.savefig(f'output/{name}/{counter}.png', dpi=dpi, transparent=True)
 
 
 def plot_spectral_radius(alphas, *, markersize=2):
